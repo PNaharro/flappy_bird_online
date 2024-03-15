@@ -15,12 +15,9 @@ class FtPlayer extends SpriteComponent
   Color color = const Color.fromARGB(255, 175, 175, 175);
 
   Vector2 previousPosition = Vector2.zero();
-  int previousHorizontalDirection = 0;
-  int previousVerticalDirection = 0;
-
-  final double moveSpeed = 200;
-  int horizontalDirection = 0;
-  int verticalDirection = 0;
+  double yVelocity = 0; // Velocidad vertical
+  final double gravity = 400; // Gravedad para la simulación de salto
+  final double jumpVelocity = -300; // Velocidad inicial del salto
 
   @override
   Future<void> onLoad() async {
@@ -32,22 +29,10 @@ class FtPlayer extends SpriteComponent
 
   @override
   bool onKeyEvent(RawKeyEvent event, Set<LogicalKeyboardKey> keysPressed) {
-    // Modificar la direcció horitzontal basada en les tecles dreta i esquerra
-    horizontalDirection = 0;
-    if (keysPressed.contains(LogicalKeyboardKey.arrowLeft)) {
-      horizontalDirection -= 1;
-    }
-    if (keysPressed.contains(LogicalKeyboardKey.arrowRight)) {
-      horizontalDirection += 1;
-    }
-
-    // Modificar la direcció vertical basada en les tecles amunt i avall
-    verticalDirection = 0;
-    if (keysPressed.contains(LogicalKeyboardKey.arrowUp)) {
-      verticalDirection -= 1;
-    }
-    if (keysPressed.contains(LogicalKeyboardKey.arrowDown)) {
-      verticalDirection += 1;
+    // Modificar la velocidad vertical al presionar la tecla espacio
+    if (event is RawKeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.space) {
+      yVelocity = jumpVelocity; // Asignar velocidad de salto
     }
 
     return false;
@@ -55,19 +40,28 @@ class FtPlayer extends SpriteComponent
 
   @override
   void update(double dt) {
-    center.add(Vector2(horizontalDirection * moveSpeed * dt,
-        verticalDirection * moveSpeed * dt));
+    // Aplicar la gravedad al movimiento vertical
+    yVelocity += gravity * dt;
 
-    Vector2 newPosition = center.clone();
-    if (newPosition != previousPosition ||
-        horizontalDirection != previousHorizontalDirection ||
-        verticalDirection != previousVerticalDirection) {
-      // Enviar les dades al servidor, només si s'han produït canvis
-      game.websocket.sendMessage(
-          '{"type": "move", "x": ${position.x}, "y": ${position.y}, "horizontalDirection": $horizontalDirection, "verticalDirection": $verticalDirection}');
+    // Actualizar la posición vertical
+    position.y += yVelocity * dt;
 
-      previousPosition.setFrom(newPosition);
+    // Limitar la posición vertical para evitar que el jugador caiga fuera de la pantalla
+    final groundY = game.size.y - size.y / 2; // Altura del suelo
+    if (position.y > groundY) {
+      position.y = groundY;
+      yVelocity = 0;
     }
+    final topY = size.y / 2; // Posición máxima en el eje y
+    if (position.y < topY) {
+      position.y = topY;
+      yVelocity = 0;
+    }
+
+    // Enviar las coordenadas al servidor
+    game.websocket.sendMessage(
+      '{"type": "move", "x": ${position.x}, "y": ${position.y}}',
+    );
 
     super.update(dt);
   }
@@ -84,13 +78,13 @@ class FtPlayer extends SpriteComponent
   @override
   void render(Canvas canvas) {
     super.render(canvas);
-    // Preparar el Paint amb color i opacitat
+    // Preparar el Paint con color y opacidad
     final paint = Paint()
       ..colorFilter =
           ColorFilter.mode(color.withOpacity(0.5), BlendMode.srcATop)
       ..filterQuality = FilterQuality.high;
 
-    // Renderitzar el sprite amb el Paint personalitzat
+    // Renderizar el sprite con el Paint personalizado
     sprite?.render(canvas, size: size, overridePaint: paint);
   }
 }
