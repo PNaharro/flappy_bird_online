@@ -146,6 +146,7 @@ ws.onClose = (socket, id) => {
 
   // Eliminamos al cliente desconectado de la lista de clientes conectados y sus movimientos
   delete connectedClients[id];
+  readys--;
 
   // Enviamos la lista actualizada de clientes conectados y sus movimientos a todos los clientes
   sendConnectedClientsAndMovements();

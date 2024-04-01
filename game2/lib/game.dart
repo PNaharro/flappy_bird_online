@@ -14,12 +14,15 @@ class FlappyEmber extends FlameGame with TapDetector, HasCollisionDetection {
   double speed = 500;
   final random = Random();
   final AppData appData;
-  // Función para mostrar el Game Over
+  late final TextComponent textComponent; // Nuevo
+  bool isGameOver = false;
 
   FlappyEmber({required this.appData});
+
   @override
   Future<void>? onLoad() async {
     List<String> playersList = appData.players;
+    print(playersList.length);
 
     switch (playersList.length) {
       case 0:
@@ -28,7 +31,6 @@ class FlappyEmber extends FlameGame with TapDetector, HasCollisionDetection {
       case 1:
         add(Sky());
         add(ScreenHitbox());
-
         player1 = Player("1", playersList[0], appData, true);
         add(player1);
         break;
@@ -48,12 +50,25 @@ class FlappyEmber extends FlameGame with TapDetector, HasCollisionDetection {
         break;
     }
 
+    // Agregar componente de texto
+    textComponent = TextComponent(text: 'Game Over');
+    textComponent.x = 100;
+    textComponent.y = 100;
+
+    // Ocultar el texto al principio
+
     // Verificar si el juego estaba en Game Over la última vez
+    if (appData.isGameOver) {
+      add(textComponent);
+      gameover();
+    }
+
     return null;
   }
 
   void gameover() {
-    //showGameOver();
+    isGameOver = true;
+    // Mostrar el texto
     pauseEngine();
   }
 
@@ -62,7 +77,7 @@ class FlappyEmber extends FlameGame with TapDetector, HasCollisionDetection {
   @override
   void update(double dt) {
     super.update(dt);
-    if (appData.isGameOver) {
+    if (isGameOver) {
       appData.players.remove(player1.playerId);
       remove(player1);
       if (appData.players == 0) {
@@ -71,16 +86,18 @@ class FlappyEmber extends FlameGame with TapDetector, HasCollisionDetection {
     } else {
       speed += 10 * dt;
       _timeSinceBox += dt;
-      if (appData.taped) {
-        print("tap");
-        print(player2 != null);
-        print("-----");
-        print(player2.playerId + "/" + appData.tappedPlayerId);
-        if (player2 != null && player2.playerId == appData.tappedPlayerId) {
-          appData.taped = false;
-          appData.tappedPlayerId = "";
-          player2.fly();
-          print("tap2");
+      if (appData.players.length > 1) {
+        if (appData.taped) {
+          print("tap");
+          print(player2 != null);
+          print("-----");
+          print(player2.playerId + "/" + appData.tappedPlayerId);
+          if (player2 != null && player2.playerId == appData.tappedPlayerId) {
+            appData.taped = false;
+            appData.tappedPlayerId = "";
+            player2.fly();
+            print("tap2");
+          }
         }
       }
       if (_timeSinceBox > _boxInterval) {

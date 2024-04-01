@@ -63,17 +63,19 @@ class _MyHomePageState extends State<MyHomePage> {
             SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
-                if (widget.appData.ready) {
-                  startFlappyEmber(widget.appData);
-                  print('Botón "Ready" presionado');
-                } else {
-                  widget.appData.sendready(widget.appData.playerId);
-                  print('Botón "Ready" presionado');
-                }
+                widget.appData.sendready(widget.appData.playerId);
+                print('Botón "Ready" presionado');
               },
               child: Text(widget.appData.ready
                   ? 'Ready'
                   : 'Not Ready'), // Actualiza el texto del botón según el estado de `ready`
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                startFlappyEmber(widget.appData);
+              },
+              child: const Text('play'),
             ),
           ],
         ),

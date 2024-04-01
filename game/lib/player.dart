@@ -53,15 +53,15 @@ class Player extends SpriteAnimationComponent
   @override
   void onCollisionStart(_, __) {
     super.onCollisionStart(_, __);
-    appData.sendcolision(position.x.toInt(), position.y.toInt(), playerId);
     colision = true;
+    appData.sendcolision(position.x.toInt(), position.y.toInt(), playerId);
   }
 
   @override
   void update(double dt) {
     super.update(dt);
     if (colision) {
-      print("aaaaaaaaaaaa");
+      appData.gameOver();
     } else {
       position.y += 200 * dt;
 
