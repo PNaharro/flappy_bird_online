@@ -132,13 +132,6 @@ class AppData {
     _webSocketChannel.sink.add(data);
   }
 
-  void startFlappyEmber(AppData appData) {
-    final game = FlappyEmber(
-      appData: appData,
-    );
-    runApp(GameWidget(game: game));
-  }
-
   void sendready(String id) {
     final data = jsonEncode({
       'type': 'ready',

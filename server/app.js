@@ -3,9 +3,6 @@ const gameLoop = require('./utilsGameLoop.js')
 const webSockets = require('./utilsWebSockets.js')
 const debug = true
 
-// Creamos un objeto para almacenar los clientes conectados
-let connectedClients = {};
-let readys = 0;
 /*
     WebSockets server, example of messages:
 
@@ -50,129 +47,62 @@ function shutDown() {
 // WebSockets
 ws.init(httpServer, port)
 
-// Mantén un registro de los movimientos de los jugadores
-// Quitamos la variable connectedClients
-
 ws.onConnection = (socket, id) => {
-  if (debug) console.log("WebSocket client connected: " + id);
+  if (debug) console.log("WebSocket client connected: " + id)
 
-
-  // Agregamos el nuevo cliente a la lista de clientes conectados y creamos una lista vacía de movimientos para él
-  connectedClients[id] = [];
-
-  // Enviamos la lista actualizada de clientes conectados y sus movimientos a todos los clientes
-  sendConnectedClientsAndMovements();
-  let connectedUsersList = Object.keys(connectedClients);
-
-  // Enviamos al cliente su propio ID
-  socket.send(JSON.stringify({
-    type: "id",
-    id: id
-  }));
-
-  // Saludamos personalmente al nuevo cliente
+  // Saludem personalment al nou client
   socket.send(JSON.stringify({
     type: "welcome",
     value: "Welcome to the server",
-    ids: connectedUsersList
-  }));
+    id: id
+  }))
 
-  // Enviamos el nuevo cliente a todos los clientes
+  // Enviem el nou client a tothom
   ws.broadcast(JSON.stringify({
     type: "newClient",
-    id: id,
-    ids: connectedClients,
-    total: connectedClients.length
-  }));
-};
-
+    id: id
+  }))
+}
 
 ws.onMessage = (socket, id, msg) => {
-  if (debug) console.log(`New message from ${id}:  ${msg.substring(0, 32)}...`);
+  if (debug) console.log(`New message from ${id}:  ${msg.substring(0, 32)}...`)
 
-  let clientData = ws.getClientData(id);
-  if (clientData == null) return;
+  let clientData = ws.getClientData(id)
+  if (clientData == null) return
 
-  let obj = JSON.parse(msg);
-  console.log(obj)
+  let obj = JSON.parse(msg)
   switch (obj.type) {
     case "init":
-      clientData.name = obj.name;
-      clientData.color = obj.color;
+      clientData.name = obj.name
+      clientData.color = obj.color
       break;
     case "move":
-      clientData.x = obj.x;
-      clientData.y = obj.y;
-      break;
-    case "player_position":
-      clientData.player_position = { x: obj.x, y: obj.y };
-      break;
-    case "player_colision":
-      console.log(clientData);
-      // Actualiza los datos del cliente
-      clientData.player_colision = { x: obj.x, y: obj.y };
-      // Envia un mensaje a todos los clientes
-      ws.broadcast(JSON.stringify({ type: 'player_colision', id: obj.id }));
-      readys--;
-
-      break;
-    case "player_tap":
-      // Actualiza los datos del cliente
-      clientData.player_tap = { x: obj.x, y: obj.y };
-      // Envia un mensaje a todos los clientes
-      ws.broadcast(JSON.stringify({ type: 'player_tap', id: obj.id }));
-      break;
-    case "ready":
-      let connectedUsersList = Object.keys(connectedClients);
-      readys++;
-      console.log(readys);
-      console.log(readys == connectedUsersList.length);
-      if (readys == connectedUsersList.length) {
-        console.log("arftghuj");
-        ws.broadcast(JSON.stringify({
-          type: "startGame"
-        }));
-      }
-      break;
+      clientData.x = obj.x
+      clientData.y = obj.y
+      break
   }
-  sendConnectedClientsAndMovements();
-};
-
+}
 
 ws.onClose = (socket, id) => {
-  if (debug) console.log("WebSocket client disconnected: " + id);
-  let clientData = ws.getClientData(id);
-  if (debug) console.log(readys);
+  if (debug) console.log("WebSocket client disconnected: " + id)
 
-  // Eliminamos al cliente desconectado de la lista de clientes conectados y sus movimientos
-  delete connectedClients[id];
-  readys--;
-
-  // Enviamos la lista actualizada de clientes conectados y sus movimientos a todos los clientes
-  sendConnectedClientsAndMovements();
-
-  // Informamos a todos los clientes de la desconexión del cliente
+  // Informem a tothom que el client s'ha desconnectat
   ws.broadcast(JSON.stringify({
     type: "disconnected",
     from: "server",
     id: id
-  }));
-};
-
-function sendConnectedClientsAndMovements() {
-  // Enviamos la lista de clientes conectados y sus movimientos a todos los clientes
-  ws.broadcast(JSON.stringify({
-    type: "connected_clients_and_movements",
-    clients: connectedClients
-  }));
-}
-function broadcast(message) {
-  Object.values(connectedClients).forEach(function each(client) {
-    // Check if the client is valid
-    if (client && client.send) {
-      // Send the message to the client
-      client.send(message);
-    }
-  });
+  }))
 }
 
+gLoop.init();
+gLoop.run = (fps) => {
+  // Aquest mètode s'intenta executar 30 cops per segon
+
+  let clientsData = ws.getClientsData()
+
+  // Gestionar aquí la partida, estats i final
+  //console.log(clientsData)
+
+  // Send game status data to everyone
+  ws.broadcast(JSON.stringify({ type: "data", value: clientsData }))
+}

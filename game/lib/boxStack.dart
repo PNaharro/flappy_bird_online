@@ -5,16 +5,14 @@ import 'package:flame/components.dart';
 import 'package:flame/widgets.dart';
 import 'package:flame/flame.dart';
 
-import 'appdata.dart';
 import 'game.dart';
 import 'box.dart';
 
 class BoxStack extends PositionComponent with HasGameRef<FlappyEmber> {
   final bool isBottom;
   static final random = Random();
-  final AppData appData;
 
-  BoxStack({required this.isBottom, required this.appData});
+  BoxStack({required this.isBottom});
 
   @override
   Future<void>? onLoad() async {
@@ -39,11 +37,9 @@ class BoxStack extends PositionComponent with HasGameRef<FlappyEmber> {
   @override
   void update(double dt) {
     super.update(dt);
-    if (!appData.isGameOver) {
-      if (position.x < -Box.initialSize.x) {
-        removeFromParent();
-      }
-      position.x -= gameRef.speed * dt;
+    if (position.x < -Box.initialSize.x) {
+      removeFromParent();
     }
+    position.x -= gameRef.speed * dt;
   }
 }

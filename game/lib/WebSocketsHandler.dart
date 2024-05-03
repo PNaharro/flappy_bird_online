@@ -18,12 +18,12 @@ class WebSocketsHandler {
 
   String? mySocketId;
 
-  void connectToServer(String serverIp, int serverPort,
+  void connectToServer(String serverIp, String serverPort,
       void Function(String message) callback) async {
     // Set connection settings
     _callback = callback;
     ip = serverIp;
-    port = serverPort.toString();
+    port = serverPort;
 
     // Connect to server
     connectionStatus = ConnectionStatus.connecting;
@@ -66,7 +66,7 @@ class WebSocketsHandler {
     _socketClient!.sink.add(message);
   }
 
-  disconnectFromServer() async {
+  void disconnectFromServer() async {
     connectionStatus = ConnectionStatus.disconnecting;
 
     // Simulate connection delay
