@@ -14,6 +14,7 @@ dependencies:
   web_socket_channel: ^2.4.4
   shared_preferences: ^2.2.2
   path_provider: ^2.1.2
+  provider: ^6.1.2
 
 dev_dependencies:
   flutter_test:
@@ -23,10 +24,5 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/images/parallax/
-    - assets/images/boxes/
     - assets/images/
-    - assets/images/ember1.png
-    - assets/images/ember2.png 
-    - assets/images/boxes/1.png
-    - assets/images/parallax/bg_sky.png
+   

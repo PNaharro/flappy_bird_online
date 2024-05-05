@@ -1,200 +1,255 @@
+// Importaciones necesarias
+// ignore_for_file: avoid_dynamic_calls
+
 import 'dart:convert';
 import 'dart:math';
 import 'dart:ui';
+import 'package:flame/collisions.dart';
 import 'package:flame/components.dart';
+import 'package:flame/extensions.dart';
 import 'package:flame/game.dart';
 import 'package:flame/input.dart';
-import 'package:flame/palette.dart';
+import 'package:flappy_ember/appdata.dart';
+import 'package:flappy_ember/box_stack.dart';
+import 'package:flappy_ember/ground.dart';
+import 'package:flappy_ember/opponent.dart';
 import 'package:flappy_ember/player.dart';
+import 'package:flappy_ember/ranking.dart';
+import 'package:flappy_ember/sky.dart';
+import 'package:flappy_ember/websockets_handler.dart';
 import 'package:flutter/material.dart';
-import 'WebSocketsHandler.dart';
-import 'boxStack.dart';
-import 'sky.dart';
+import 'package:provider/provider.dart';
 
-enum GameState {
-  WaitingForPlayers,
-  ReadyToStart,
-  Playing,
-  GameOver,
-}
+class FlappyEmberGame extends FlameGame
+    with HasCollisionDetection, TapDetector {
+  Function? onGameStart;
+  FlappyEmberGame() {
+    _initializeWebSocket();
+  }
 
-class FlappyEmber extends FlameGame with TapDetector, HasCollisionDetection {
-  late final Player player;
-  double speed = 500;
-  final random = Random();
-  late final WebSocketsHandler webSocketHandler;
+  late final WebSocketsHandler _webSocketsHandler;
+  double speed = 200;
+  late final Player _player = Player();
   double _timeSinceBox = 0;
   double _boxInterval = 1;
-  List<String> players = [];
-  GameState gameState = GameState.WaitingForPlayers;
+  double _timeSinceLastUpdate = 0;
+  final double updateInterval = 0.5;
+  List<dynamic> connectedPlayers = [];
+  List<dynamic> lostPlayers = [];
+  Map<String, Opponent> opponents = {};
+  Function(List<dynamic> connectedPlayers)? onPlayersUpdated;
+  Function(List<dynamic> lostPlayers)? onPlayersUpdatedlost;
+  Function(int tiempo)? onTiempo;
+  late String name;
+  int tiempo = 30;
+  bool isBottom = false;
 
-  FlappyEmber() {
-    initWebSocket();
+  int stackHeight = 1;
+
+  @override
+  Future<void> onLoad() async {
+    add(_player);
+    add(Sky());
+    add(Ground());
+    add(ScreenHitbox());
+    _sendSize();
   }
 
   @override
-  Future<void>? onLoad() async {
-    return null;
-  }
-
-  void initWebSocket() {
-    webSocketHandler = WebSocketsHandler();
-    webSocketHandler.connectToServer("localhost", "8888", handleMessage);
-  }
-
-  void handleMessage(String message) {
-    Map<String, dynamic> messageMap = json.decode(message);
-
-    switch (messageMap['type']) {
-      case 'welcome':
-        print("Mensaje de bienvenida recibido: ${messageMap['value']}");
-        break;
-      case 'newClient':
-        if (gameState == GameState.WaitingForPlayers) {
-          players.add(messageMap['id']);
-          if (players.length >= 4) {
-            gameState = GameState.ReadyToStart;
-          }
-        }
-        break;
-      case 'data':
-        // Maneja el mensaje de datos
-        break;
-      case 'disconnected':
-        // Maneja el mensaje de cliente desconectado
-        break;
-      default:
-        // Maneja cualquier otro tipo de mensaje
-        break;
-    }
-  }
-
-  void startGame() {
-    gameState = GameState.Playing;
-    player = Player();
-    add(Sky());
-    add(ScreenHitbox());
-    add(player);
-  }
-
-  void gameover() {
-    pauseEngine();
-    gameState = GameState.GameOver;
+  void onTap() {
+    _player.fly();
   }
 
   @override
   void update(double dt) {
     super.update(dt);
-
-    if (gameState == GameState.Playing) {
-      speed += 10 * dt;
-      _timeSinceBox += dt;
-
-      if (_timeSinceBox > _boxInterval) {
-        add(BoxStack(isBottom: random.nextBool()));
-        _timeSinceBox = 0;
+    _timeSinceBox += dt;
+    if (_timeSinceBox > _boxInterval) {
+      _sendSize();
+      add(BoxStack());
+      _timeSinceBox = 0;
+    }
+    if (_player.perdido == false) {
+      _timeSinceLastUpdate += dt;
+      if (_timeSinceLastUpdate >= updateInterval) {
+        _sendPlayerPosition();
+        _timeSinceLastUpdate = 0;
       }
-
-      // Envia un mensaje "move" al servidor cada vez que se actualice el juego
-      sendMoveMessage();
+    } else {
+      if (_player.parent != null) {
+        remove(_player);
+        _sendPlayerLose();
+        connectedPlayers.removeWhere(
+            (player) => player['id'] == _webSocketsHandler.mySocketId);
+      }
+      if (opponents.isEmpty) {
+        overlays.add('rankingOverlay');
+      }
     }
   }
 
-  void sendMoveMessage() {
-    Map<String, dynamic> moveData = {
-      'x': player.x,
-      'y': player.y,
-    };
-
-    sendMessageToServer('move', moveData);
+  void _initializeWebSocket() {
+    _webSocketsHandler = WebSocketsHandler();
+    _webSocketsHandler.connectToServer("localhost", 8888, _onMessageReceived);
   }
 
-  void sendMessageToServer(String type, Map<String, dynamic> data) {
-    Map<String, dynamic> message = {
-      'type': type,
-      ...data,
-    };
+  void _onMessageReceived(String message) {
+    final data = jsonDecode(message);
 
-    String jsonMessage = json.encode(message);
+    switch (data['type']) {
+      case 'welcome':
+        _webSocketsHandler
+            .sendMessage(jsonEncode({'type': 'init', 'name': name}));
+        print("Welcome: ${data['value']}");
+        String assignedColorHex = data['color'] as String;
+        Color assignedColor;
+        if (RegExp(r'^#([0-9A-Fa-f]{6})$').hasMatch(assignedColorHex)) {
+          // Es un valor hexadecimal, convertirlo a un Color
+          assignedColor =
+              Color(int.parse(assignedColorHex.replaceFirst('#', '0xff')));
+        } else {
+          // No es un valor hexadecimal, buscar en un mapeo de nombres de colores conocidos
+          assignedColor = _colorFromName(assignedColorHex) ??
+              Colors.black; // Usar negro como color por defecto
+        }
+        // Cambiar el color del jugador
+        _player.changeColor(assignedColor);
+        _webSocketsHandler.mySocketId = data['id'].toString();
+        break;
+      case 'data':
+        Map<String, dynamic> box = data['box'] as Map<String, dynamic>;
 
-    webSocketHandler.sendMessage(jsonMessage);
-  }
+        isBottom = box['isBottom'] as bool;
+        stackHeight = box['stackHeight'] as int;
+        List<dynamic> opponentsData = data['opponents'] as List<dynamic>;
+        for (var oppData in opponentsData) {
+          final id = oppData['id'];
 
-  @override
-  void onTap() {
-    super.onTap();
-    player.fly();
-  }
+          if (id == _webSocketsHandler.mySocketId) continue;
+          if (opponents.containsKey(id)) {
+            final opponent = opponents[id]!;
+            double? clientX = -100.0;
+            double? clientY = -100.0;
+            var x = oppData['x'];
+            if (x != null) {
+              clientX =
+                  (x is num) ? x.toDouble() : double.tryParse(x.toString());
+            }
+            var y = oppData['y'];
+            if (y != null) {
+              clientY =
+                  (y is num) ? y.toDouble() : double.tryParse(y.toString());
+            }
+            opponent.position = Vector2(clientX!, clientY!);
+          }
+        }
+        break;
+      case 'playerListUpdate':
+        connectedPlayers = (data['connectedPlayers'] as List)
+            .map((e) => e as Map<String, dynamic>)
+            .toList();
+        onPlayersUpdated?.call(connectedPlayers);
 
-  @override
-  void render(Canvas canvas) {
-    super.render(canvas);
+        print("Updated Players List: $connectedPlayers");
+        for (var playerData in connectedPlayers) {
+          final id = playerData['id'].toString();
+          if (id == _webSocketsHandler.mySocketId) continue;
+          final colorName = playerData['color'] as String;
+          final color = _colorFromName(colorName) ?? Colors.grey;
 
-    if (gameState == GameState.WaitingForPlayers ||
-        gameState == GameState.ReadyToStart) {
-      // Renderiza la lista de jugadores esperando
-      renderWaitingPlayers(canvas);
-    } else if (gameState == GameState.ReadyToStart) {
-      // Renderiza el botón para comenzar el juego
-      renderStartButton(canvas);
+          if (!opponents.containsKey(id)) {
+            final newOpponent = Opponent(id: id, color: color)
+              ..position = Vector2(0, 0);
+            opponents[id] = newOpponent;
+            add(newOpponent);
+          } else {
+            final existingOpponent = opponents[id]!;
+            existingOpponent.color = color;
+          }
+        }
+        opponents.keys
+            .where(
+                (id) => !connectedPlayers.any((p) => p['id'].toString() == id))
+            .toList()
+            .forEach((id) {
+          opponents.remove(id);
+        });
+
+        break;
+      case "gameStart":
+        onGameStart?.call();
+        break;
+
+      case "playerLostUpdate":
+        lostPlayers = (data['lost'] as List)
+            .map((e) => e as Map<String, dynamic>)
+            .toList();
+        onPlayersUpdatedlost?.call(lostPlayers);
+        for (var lostPlayerData in lostPlayers) {
+          final lostPlayerId = lostPlayerData['id'].toString();
+          if (opponents.containsKey(lostPlayerId)) {
+            final opponentToRemove = opponents.remove(lostPlayerId);
+            remove(opponentToRemove!);
+          }
+        }
+        break;
+      case "countdown":
+        tiempo = data['value'] as int;
+        onTiempo?.call(tiempo);
+        break;
     }
   }
 
-  void renderWaitingPlayers(Canvas canvas) {
-    // Renderiza la lista de jugadores esperando
-    // Puedes personalizar el aspecto de esta lista según tus necesidades
-    final textStyle = TextStyle(color: BasicPalette.white.color);
-    final textSpan = TextSpan(
-      text: 'Jugadores Esperando:\n',
-      style: textStyle,
-    );
-
-    final textPainter = TextPainter(
-      text: textSpan,
-      textAlign: TextAlign.left,
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout(minWidth: 0, maxWidth: size.x);
-
-    Offset offset = Offset(10, 10);
-    textPainter.paint(canvas, offset);
-
-    final playerList = players.join('\n');
-    final playerListSpan = TextSpan(
-      text: playerList,
-      style: textStyle,
-    );
-    final playerListPainter = TextPainter(
-      text: playerListSpan,
-      textAlign: TextAlign.left,
-      textDirection: TextDirection.ltr,
-    );
-    playerListPainter.layout(minWidth: 0, maxWidth: size.x);
-    offset = offset.translate(0, textPainter.size.height);
-    playerListPainter.paint(canvas, offset);
+  Color? _colorFromName(String name) {
+    switch (name) {
+      case 'vermell':
+        return Colors.red;
+      case 'verd':
+        return Colors.green;
+      case 'taronja':
+        return Colors.orange;
+      case 'blau':
+        return Colors.blue;
+      default:
+        return null;
+    }
   }
 
-  void renderStartButton(Canvas canvas) {
-    // Renderiza un botón para comenzar el juego
-    // Puedes personalizar el aspecto de este botón según tus necesidades
-    final paint = BasicPalette.white.paint();
-    final buttonRect = Rect.fromLTWH(50, 50, 200, 50);
-    canvas.drawRect(buttonRect, paint);
+  void _sendPlayerPosition() {
+    _webSocketsHandler.sendMessage(jsonEncode({
+      'type': 'move',
+      'x': _player.x,
+      'y': _player.y,
+    }));
+  }
 
-    final textStyle = TextStyle(color: BasicPalette.black.color);
-    final textSpan = TextSpan(
-      text: 'Comenzar Juego',
-      style: textStyle,
-    );
-    final textPainter = TextPainter(
-      text: textSpan,
-      textAlign: TextAlign.center,
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout(minWidth: 0, maxWidth: buttonRect.width);
-    final textOffset = Offset(
-        buttonRect.left + (buttonRect.width - textPainter.width) / 2,
-        buttonRect.top + (buttonRect.height - textPainter.height) / 2);
-    textPainter.paint(canvas, textOffset);
+  void _sendSize() {
+    _webSocketsHandler.sendMessage(jsonEncode({'type': 'size', 'x': size.y}));
+  }
+
+  void _sendPlayerLose() {
+    _webSocketsHandler.sendMessage(jsonEncode({
+      'type': 'perdido',
+      'id': _webSocketsHandler.mySocketId,
+      'name': name
+    }));
+  }
+
+  void _sendBoxes() {
+    _webSocketsHandler.sendMessage(jsonEncode({
+      'type': 'perdido',
+      'id': _webSocketsHandler.mySocketId,
+      'name': name
+    }));
+  }
+
+  void disconnect() {
+    _webSocketsHandler.disconnectFromServer();
+  }
+
+  @override
+  void onRemove() {
+    super.onRemove();
+    print("Player ha sido eliminado.");
   }
 }

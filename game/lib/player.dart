@@ -3,49 +3,79 @@ import 'package:flame/components.dart';
 import 'package:flame/effects.dart';
 import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
-
-import 'game.dart';
+import 'dart:ui' as ui;
 
 class Player extends SpriteAnimationComponent
-    with CollisionCallbacks, HasGameRef<FlappyEmber> {
-  Player() : super(size: Vector2(100, 100), position: Vector2(100, 100));
+    with CollisionCallbacks, HasGameRef {
+  Color color = Colors.white;
+
+  Player() : super(position: Vector2.all(100), size: Vector2.all(50));
+
+  final velocity = Vector2(0, 150);
+  bool perdido = false;
 
   @override
-  Future<void>? onLoad() async {
-    add(CircleHitbox());
-
-    final image = await Flame.images.load('ember1.png');
-    animation = SpriteAnimation.fromFrameData(
-      image,
+  Future<void> onLoad() async {
+    String imagePath = _getImagePathForColor(color);
+    animation = await SpriteAnimation.load(
+      imagePath,
       SpriteAnimationData.sequenced(
         amount: 4,
-        stepTime: 0.10,
         textureSize: Vector2.all(16),
+        stepTime: 0.12,
       ),
     );
+    add(CircleHitbox());
   }
 
-  @override
-  void onCollisionStart(_, __) {
-    super.onCollisionStart(_, __);
-    gameRef.gameover();
+  String _getImagePathForColor(Color color) {
+    // Asumiendo que 'color' es el Color de Flutter y que mapeas estos a tus colores definidos
+    if (color == Colors.red) {
+      // Vermell
+      return 'embervermell.png';
+    } else if (color == Colors.blue) {
+      // Blau
+      return 'emberblau.png';
+    } else if (color == Colors.orange) {
+      // Taronja
+      return 'embertaronja.png';
+    } else if (color == Colors.green) {
+      // Verd
+      return 'emberverd.png';
+    } else {
+      return 'ember.png'; // Un color por defecto si no se reconoce el color
+    }
+  }
+
+  void changeColor(Color newColor) {
+    color = newColor;
   }
 
   @override
   void update(double dt) {
     super.update(dt);
+    position.y += velocity.y * dt;
+  }
 
-    position.y += 200 * dt;
+  @override
+  void onCollisionStart(Set<Vector2> _, PositionComponent other) {
+    super.onCollisionStart(_, other);
+    perdido = true;
   }
 
   void fly() {
-    final effect = MoveByEffect(
+    add(
+      MoveByEffect(
         Vector2(0, -100),
         EffectController(
-          duration: 0.5,
+          duration: 0.2,
           curve: Curves.decelerate,
-        ));
+        ),
+      ),
+    );
+  }
 
-    add(effect);
+  void onLose() {
+    gameRef.overlays.add('rankingOverlay');
   }
 }
